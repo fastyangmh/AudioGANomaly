@@ -233,13 +233,13 @@ class UnsupervisedModel(BaseModel):
         x, _ = batch
         x_hat, latent1, latent2 = self.generator(x)
         prob_x, feat_x = self.discriminator(x)
-        prob_x_hat, feat_x_hat = self.discriminator(x_hat.detach())
-        return x, x_hat, latent1, latent2, prob_x, feat_x, prob_x_hat, feat_x_hat
+        return x, x_hat, latent1, latent2, prob_x, feat_x
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        x, x_hat, latent1, latent2, prob_x, feat_x, prob_x_hat, feat_x_hat = self.shared_step(
+        x, x_hat, latent1, latent2, prob_x, feat_x = self.shared_step(
             batch=batch)
         if optimizer_idx == 0:  # generator
+            prob_x_hat, feat_x_hat = self.discriminator(x_hat)
             adv_loss = self.l2_loss(feat_x_hat,
                                     feat_x) * self.adversarial_weight
             con_loss = self.l1_loss(x_hat, x) * self.reconstruction_weight
@@ -259,6 +259,7 @@ class UnsupervisedModel(BaseModel):
                      logger=True)
             return g_loss
         if optimizer_idx == 1:  #discriminator
+            prob_x_hat, feat_x_hat = self.discriminator(x_hat.detach())
             real_loss = self.bce_loss(prob_x, torch.ones_like(input=prob_x))
             fake_loss = self.bce_loss(prob_x_hat,
                                       torch.zeros_like(input=prob_x_hat))
@@ -272,14 +273,16 @@ class UnsupervisedModel(BaseModel):
             return d_loss
 
     def validation_step(self, batch, batch_idx):
-        x, x_hat, latent1, latent2, prob_x, feat_x, prob_x_hat, feat_x_hat = self.shared_step(
+        x, x_hat, latent1, latent2, prob_x, feat_x = self.shared_step(
             batch=batch)
         # generator
+        prob_x_hat, feat_x_hat = self.discriminator(x_hat)
         adv_loss = self.l2_loss(feat_x_hat, feat_x) * self.adversarial_weight
         con_loss = self.l1_loss(x_hat, x) * self.reconstruction_weight
         enc_loss = self.l2_loss(latent2, latent1) * self.encoding_weight
         g_loss = enc_loss + con_loss + adv_loss
         # discriminator
+        prob_x_hat, feat_x_hat = self.discriminator(x_hat.detach())
         real_loss = self.bce_loss(prob_x, torch.ones_like(input=prob_x))
         fake_loss = self.bce_loss(prob_x_hat,
                                   torch.zeros_like(input=prob_x_hat))
